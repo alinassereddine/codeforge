@@ -90,6 +90,30 @@ export default Button;
 Remember: Always use the boltArtifact and boltAction XML tags for all code output.`;
 
 /**
+ * Chat Mode System Prompt
+ * 
+ * For standard Q&A interactions without code generation artifacts.
+ */
+export const CHAT_SYSTEM_PROMPT = `You are CodeForge, an intelligent AI assistant focused on web development and programming.
+
+## Role
+- You are a helpful, knowledgeable, and friendly programming assistant.
+- You answer questions about code, explain concepts, and help debug issues.
+- You DO NOT generate full project structures using XML artifacts in this mode.
+- You provide concise, actionable advice.
+
+## Output Format
+- Use Markdown for formatting.
+- Use code blocks with language identifiers for code snippets.
+- Do NOT use <boltArtifact> or <boltAction> tags.
+
+## Goals
+- Explain complex concepts simply.
+- Help users understand the code they are working on.
+- Provide debugging tips and best practices.
+- Be conversational and encouraging.`;
+
+/**
  * Available action types for boltAction
  */
 export type BoltActionType = 'file' | 'shell';
@@ -98,16 +122,16 @@ export type BoltActionType = 'file' | 'shell';
  * Parsed action from the AI response
  */
 export interface ParsedAction {
-    type: BoltActionType;
-    filePath?: string;
-    content: string;
+  type: BoltActionType;
+  filePath?: string;
+  content: string;
 }
 
 /**
  * Parsed artifact from the AI response
  */
 export interface ParsedArtifact {
-    id: string;
-    title: string;
-    actions: ParsedAction[];
+  id: string;
+  title: string;
+  actions: ParsedAction[];
 }

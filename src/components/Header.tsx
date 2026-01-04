@@ -1,4 +1,5 @@
-import { Zap, Play, RotateCcw, Settings, Sun, Moon, Laptop } from 'lucide-react';
+import { useState } from 'react';
+import { Zap, Play, RotateCcw, Settings, Sun, Moon, Laptop, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useContainerStore } from '@/store/containerStore';
 import { useThemeStore, type Theme } from '@/store/themeStore';
@@ -10,6 +11,7 @@ import {
 } from '@/lib/webcontainer/container';
 import { virtualFileSystem } from '@/lib/webcontainer/files';
 import { cn } from '@/lib/utils';
+import { downloadProjectAsZip } from '@/utils/downloadZip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +34,8 @@ export function Header() {
   } = useContainerStore();
 
   const { theme, setTheme } = useThemeStore();
+  const { container } = useContainerStore();
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const isLoading = ['booting', 'mounting', 'installing', 'starting'].includes(status);
   const isReady = status === 'ready';
@@ -190,14 +194,36 @@ export function Header() {
         )}
 
         {isReady && (
-          <Button
-            onClick={handleReset}
-            variant="outline"
-            className="gap-2"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span className="hidden sm:inline">Reset</span>
-          </Button>
+          <>
+            {/* Download Button */}
+            <Button
+              onClick={async () => {
+                setIsDownloading(true);
+                await downloadProjectAsZip(container, 'codeforge-project.zip');
+                setIsDownloading(false);
+              }}
+              variant="outline"
+              className="gap-2"
+              disabled={isDownloading}
+            >
+              {isDownloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline">{isDownloading ? 'Exporting...' : 'Download'}</span>
+            </Button>
+
+            {/* Reset Button */}
+            <Button
+              onClick={handleReset}
+              variant="outline"
+              className="gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline">Reset</span>
+            </Button>
+          </>
         )}
 
         {/* Settings Dropdown with Theme Switcher */}

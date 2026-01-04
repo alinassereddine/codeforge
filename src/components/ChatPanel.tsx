@@ -46,6 +46,8 @@ import { useChatStore, type ApiProvider } from '@/store/chatStore';
 import { useContainerStore } from '@/store/containerStore';
 import { StreamParser } from '@/lib/ai/parseStream';
 import { getFileTree } from '@/lib/webcontainer/container';
+import { streamOpenRouter, OPENROUTER_MODELS } from '@/lib/ai/openrouter';
+import { SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT } from '@/lib/ai/prompts';
 import { cn } from '@/lib/utils';
 
 /**
@@ -278,7 +280,7 @@ function MessageBubble({
  * Settings dialog
  */
 function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-    const { apiKey, apiProvider, setApiKey, setApiProvider } = useChatStore();
+    const { apiKey, apiProvider, selectedModel, setApiKey, setApiProvider, setSelectedModel } = useChatStore();
     const [tempKey, setTempKey] = useState(apiKey);
 
     return (
@@ -296,9 +298,31 @@ function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
                             <SelectContent>
                                 <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
                                 <SelectItem value="openai">OpenAI (GPT-4)</SelectItem>
+                                <SelectItem value="gemini">Google (Gemini)</SelectItem>
+                                <SelectItem value="openrouter">OpenRouter</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {apiProvider === 'openrouter' && (
+                        <div className="space-y-2">
+                            <Label>Model</Label>
+                            <Select value={selectedModel} onValueChange={setSelectedModel}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a model" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {OPENROUTER_MODELS.map((model) => (
+                                        <SelectItem key={model.id} value={model.id}>
+                                            <span className="font-medium">{model.name}</span>
+                                            <span className="ml-2 text-muted-foreground text-xs">({model.provider})</span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         <Label>API Key</Label>
                         <Input type="password" placeholder="sk-..." value={tempKey} onChange={(e) => setTempKey(e.target.value)} />
@@ -309,7 +333,7 @@ function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
                     <Button onClick={() => { setApiKey(tempKey); onOpenChange(false); }}>Save</Button>
                 </div>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 }
 
@@ -327,10 +351,14 @@ export function ChatPanel() {
         isStreaming,
         currentStreamId,
         apiKey,
+        apiProvider,
+        selectedModel,
+        chatMode,
         addMessage,
         appendToMessage,
         startStreaming,
         stopStreaming,
+        setChatMode,
     } = useChatStore();
 
     const { container, setStatus, setFileTree } = useContainerStore();
@@ -398,11 +426,61 @@ export function ChatPanel() {
         });
 
         try {
-            for await (const chunk of mockStream(MOCK_RESPONSE)) {
-                await parser.processChunk(chunk);
+            // Check if we should use real API or mock
+            const useRealApi = apiKey && apiProvider === 'openrouter';
+
+            if (useRealApi) {
+                // Use real OpenRouter API
+                console.log('[Chat] Using OpenRouter API');
+
+                // Get conversation history for context
+                const conversationHistory = messages.map(m => ({
+                    role: m.role,
+                    content: m.content,
+                }));
+
+                // Add current user message
+                conversationHistory.push({ role: 'user', content: userMessage });
+
+                // Select system prompt based on mode
+                const systemPrompt = chatMode === 'agent' ? SYSTEM_PROMPT : CHAT_SYSTEM_PROMPT;
+
+                // If in agent mode, we use the specific system prompt in the API call
+                // But streamOpenRouter adds SYSTEM_PROMPT by default, so we need to override it or modify streamOpenRouter
+                // Let's modify the messages array directly to include the correct system prompt
+
+                const apiMessages = [
+                    { role: 'system', content: systemPrompt },
+                    ...conversationHistory
+                ];
+
+                await streamOpenRouter({
+                    apiKey,
+                    model: selectedModel as import('@/lib/ai/openrouter').OpenRouterModel,
+                    messages: conversationHistory, // We'll pass history, but we need to tell streamOpenRouter which prompt to use
+                    systemPromptOverride: systemPrompt,
+                    onChunk: async (chunk) => {
+                        await parser.processChunk(chunk);
+                    },
+                    onError: (error) => {
+                        console.error('[Chat] OpenRouter error:', error);
+                        appendToMessage(streamId, `\n\n❌ Error: ${error.message}`);
+                    },
+                    onComplete: () => {
+                        parser.finalize();
+                        console.log('[Chat] Stream complete');
+                    },
+                });
+            } else {
+                // Use mock response for demo
+                console.log('[Chat] Using mock response (no API key or provider not openrouter)');
+                for await (const chunk of mockStream(MOCK_RESPONSE)) {
+                    await parser.processChunk(chunk);
+                }
+                parser.finalize();
             }
-            parser.finalize();
         } catch (error) {
+            console.error('[Chat] Error:', error);
             appendToMessage(streamId, '\n\n❌ An error occurred.');
         } finally {
             stopStreaming();
@@ -425,6 +503,31 @@ export function ChatPanel() {
                     <Sparkles className="w-4 h-4 text-cyan-400" />
                     <span className="text-sm font-medium">AI Assistant</span>
                 </div>
+
+                {/* Mode Toggle */}
+                <div className="flex bg-muted rounded-md p-0.5 mx-2">
+                    <button
+                        onClick={() => setChatMode('agent')}
+                        className={cn(
+                            "px-2 py-0.5 text-xs font-medium rounded-sm transition-colors",
+                            chatMode === 'agent' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        Agent
+                    </button>
+                    <button
+                        onClick={() => setChatMode('chat')}
+                        className={cn(
+                            "px-2 py-0.5 text-xs font-medium rounded-sm transition-colors",
+                            chatMode === 'chat' ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        Chat
+                    </button>
+                </div>
+
+                <div className="flex-1" />
+
                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsSettingsOpen(true)}>
                     <Settings className="w-3.5 h-3.5" />
                 </Button>

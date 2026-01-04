@@ -21,7 +21,15 @@ export interface ChatMessage {
 /**
  * API Provider options
  */
-export type ApiProvider = 'openai' | 'anthropic';
+/**
+ * API Provider options
+ */
+export type ApiProvider = 'anthropic' | 'openai' | 'gemini' | 'openrouter';
+
+/**
+ * Chat Mode options
+ */
+export type ChatMode = 'agent' | 'chat';
 
 /**
  * Chat store state interface
@@ -35,8 +43,11 @@ interface ChatStore {
     currentStreamId: string | null;
 
     // API configuration
+    // API configuration
     apiKey: string;
     apiProvider: ApiProvider;
+    selectedModel: string;
+    chatMode: ChatMode;
 
     // UI state
     isChatOpen: boolean;
@@ -55,6 +66,8 @@ interface ChatStore {
     // Actions - API
     setApiKey: (key: string) => void;
     setApiProvider: (provider: ApiProvider) => void;
+    setSelectedModel: (model: string) => void;
+    setChatMode: (mode: ChatMode) => void;
 
     // Actions - UI
     toggleChat: () => void;
@@ -83,7 +96,9 @@ export const useChatStore = create<ChatStore>()(
             isStreaming: false,
             currentStreamId: null,
             apiKey: '',
-            apiProvider: 'anthropic',
+            apiProvider: 'openrouter',
+            selectedModel: 'anthropic/claude-sonnet-4.5',
+            chatMode: 'agent',
             isChatOpen: false,
             isSettingsOpen: false,
 
@@ -167,6 +182,14 @@ export const useChatStore = create<ChatStore>()(
                 set({ apiProvider: provider });
             },
 
+            setSelectedModel: (model) => {
+                set({ selectedModel: model });
+            },
+
+            setChatMode: (mode) => {
+                set({ chatMode: mode });
+            },
+
             // UI actions
             toggleChat: () => {
                 set((state) => ({ isChatOpen: !state.isChatOpen }));
@@ -194,10 +217,12 @@ export const useChatStore = create<ChatStore>()(
         }),
         {
             name: 'codeforge-chat-storage',
-            // Only persist API key and provider
+            // Only persist API key, provider, and selected model
             partialize: (state) => ({
                 apiKey: state.apiKey,
                 apiProvider: state.apiProvider,
+                selectedModel: state.selectedModel,
+                chatMode: state.chatMode,
             }),
         }
     )
