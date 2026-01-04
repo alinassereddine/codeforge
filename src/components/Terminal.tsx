@@ -1,17 +1,60 @@
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useContainerStore } from '@/store/containerStore';
+import { executeShellCommand } from '@/lib/webcontainer/container';
 import { Terminal as TerminalIcon, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Terminal() {
-  const { terminalOutput, status } = useContainerStore();
+  const { terminalOutput, status, container, addTerminalOutput } = useContainerStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [input, setInput] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [terminalOutput]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !container) return;
+
+    const command = input.trim();
+    setHistory(prev => [...prev, command]);
+    setHistoryIndex(-1);
+    setInput('');
+
+    // Focus back on input
+    inputRef.current?.focus();
+
+    await executeShellCommand(container, command, addTerminalOutput);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (history.length > 0) {
+        const newIndex = historyIndex === -1 ? history.length - 1 : Math.max(0, historyIndex - 1);
+        setHistoryIndex(newIndex);
+        setInput(history[newIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex !== -1) {
+        const newIndex = historyIndex + 1;
+        if (newIndex >= history.length) {
+          setHistoryIndex(-1);
+          setInput('');
+        } else {
+          setHistoryIndex(newIndex);
+          setInput(history[newIndex]);
+        }
+      }
+    }
+  };
 
   const getOutputColor = (type: string) => {
     switch (type) {
@@ -54,6 +97,23 @@ export function Terminal() {
             <span className="text-primary">$</span>
             <span className="animate-blink">▋</span>
           </div>
+        )}
+
+        {/* Input Line */}
+        {status === 'ready' && (
+          <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-2">
+            <span className="text-primary font-bold">$</span>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="flex-1 bg-transparent border-none outline-none text-terminal-text font-mono p-0 h-6 focus:ring-0"
+              autoComplete="off"
+              autoFocus
+            />
+          </form>
         )}
       </div>
     </div>

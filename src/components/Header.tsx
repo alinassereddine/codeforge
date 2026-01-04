@@ -11,7 +11,9 @@ import {
 } from '@/lib/webcontainer/container';
 import { virtualFileSystem } from '@/lib/webcontainer/files';
 import { cn } from '@/lib/utils';
+
 import { downloadProjectAsZip } from '@/utils/downloadZip';
+import { loadProject } from '@/lib/persistence';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,7 +72,19 @@ export function Header() {
         timestamp: new Date(),
       });
 
-      await mountFiles(container, virtualFileSystem);
+      // Try to load saved project
+      const savedProject = await loadProject();
+
+      if (savedProject) {
+        addTerminalOutput({
+          type: 'info',
+          text: '💾 Found saved project, restoring...\n',
+          timestamp: new Date(),
+        });
+        await mountFiles(container, savedProject);
+      } else {
+        await mountFiles(container, virtualFileSystem);
+      }
 
       addTerminalOutput({
         type: 'success',

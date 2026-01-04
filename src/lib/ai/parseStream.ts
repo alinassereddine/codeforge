@@ -9,6 +9,7 @@ import type { WebContainer } from '@webcontainer/api';
 import type { BoltActionType, ParsedAction } from './prompts';
 import { useContainerStore } from '@/store/containerStore';
 import { getFileTree } from '@/lib/webcontainer/container';
+import { debouncedSave } from '@/lib/persistence';
 
 /**
  * Parser states for the state machine
@@ -261,6 +262,7 @@ export class StreamParser {
 
             // Write the file
             await this.container.fs.writeFile(filePath, content);
+            debouncedSave(this.container);
             console.log(`[StreamParser] Written: ${filePath}`);
 
             // FORCE REFRESH: Update UI file tree immediately after write

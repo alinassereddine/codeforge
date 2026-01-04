@@ -1,5 +1,6 @@
 import { WebContainer } from '@webcontainer/api';
 import type { FileSystemTree } from '@webcontainer/api';
+import { debouncedSave } from '@/lib/persistence';
 
 let webcontainerInstance: WebContainer | null = null;
 
@@ -159,6 +160,58 @@ export async function startDevServer(
 }
 
 /**
+ * Execute a shell command in the container
+ */
+export async function executeShellCommand(
+  container: WebContainer,
+  command: string,
+  onOutput: (output: TerminalOutput) => void
+): Promise<void> {
+  const [cmd, ...args] = command.trim().split(' ');
+
+  if (!cmd) return;
+
+  // Echo command
+  onOutput({
+    type: 'info',
+    text: `$ ${command}\n`,
+    timestamp: new Date(),
+  });
+
+  try {
+    const process = await container.spawn(cmd, args);
+
+    process.output.pipeTo(
+      new WritableStream({
+        write(data) {
+          onOutput({
+            type: 'stdout',
+            text: data,
+            timestamp: new Date(),
+          });
+        },
+      })
+    );
+
+    const exitCode = await process.exit;
+
+    if (exitCode !== 0) {
+      onOutput({
+        type: 'error',
+        text: `Command failed with exit code ${exitCode}\n`,
+        timestamp: new Date(),
+      });
+    }
+  } catch (error) {
+    onOutput({
+      type: 'error',
+      text: `Failed to execute command: ${error}\n`,
+      timestamp: new Date(),
+    });
+  }
+}
+
+/**
  * Get the current WebContainer instance
  */
 export function getWebContainerInstance(): WebContainer | null {
@@ -174,6 +227,7 @@ export async function writeFile(
   contents: string
 ): Promise<void> {
   await container.fs.writeFile(path, contents);
+  debouncedSave(container);
 }
 
 /**
